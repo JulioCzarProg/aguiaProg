@@ -1,0 +1,6 @@
+# Configuração mínima da CLI do Supabase para o projeto Indicador360.
+# project_id deve ser o REF do seu projeto (hldpkgbrbciquxmtlrot).
+project_id = "hldpkgbrbciquxmtlrot"
+
+[db]
+major_version = 17
