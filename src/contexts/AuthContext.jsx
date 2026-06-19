@@ -1,31 +1,24 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import { supabase } from '../supabase'
 
-const SUPA_URL = import.meta.env.VITE_SUPABASE_URL
-const SUPA_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY
-
 const AuthContext = createContext(null)
 export const useAuth = () => useContext(AuthContext)
 
 const STORAGE_KEY = 'indicador360_usuario'
-
-// Hierarquia de funções para checagem de nível
 const NIVEL = { voluntario: 0, capitao: 1, coordenador: 2, admin: 3 }
 
 // Mantém só os dígitos do telefone (ex.: (38) 99999-9999 -> 3899999999)
-export function soDigitos(tel = '') {
-  return tel.replace(/\D/g, '')
-}
+export function soDigitos(tel = '') { return tel.replace(/\D/g, '') }
+const primeiroNome = (n = '') => n.trim().split(/\s+/)[0]
+const pub = (u) => ({ id: u.id, nome: u.nome, telefone: u.telefone, congregacao: u.congregacao, funcao: u.funcao, foto_url: u.foto_url })
 
 export function AuthProvider({ children }) {
   const [usuario, setUsuario] = useState(null)
   const [carregando, setCarregando] = useState(true)
 
   useEffect(() => {
-    const salvo = localStorage.getItem(STORAGE_KEY)
-    if (salvo) {
-      try { setUsuario(JSON.parse(salvo)) } catch { /* ignore */ }
-    }
+    const s = localStorage.getItem(STORAGE_KEY)
+    if (s) { try { setUsuario(JSON.parse(s)) } catch { /* ignore */ } }
     setCarregando(false)
   }, [])
 
@@ -35,76 +28,56 @@ export function AuthProvider({ children }) {
     else localStorage.removeItem(STORAGE_KEY)
   }, [])
 
-  // Passo 1: a Edge Function gera/salva o código e envia pelo WhatsApp (Meta).
-  // O código não volta para o navegador (salvo modo de teste do servidor).
-  const solicitarCodigo = useCallback(async (telefone) => {
-    const digitos = soDigitos(telefone)
-    const resp = await fetch(`${SUPA_URL}/functions/v1/enviar-codigo`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${SUPA_ANON}`,
-        apikey: SUPA_ANON
-      },
-      body: JSON.stringify({ telefone: digitos })
-    }).catch(() => null)
+  // gera 5 opções (primeiro nome OU congregação) para o desafio do capitão
+  async function desafioCapitao(u) {
+    const porNome = Math.random() < 0.5
+    const campo = porNome ? 'nome' : 'congregacao'
+    const correta = porNome ? primeiroNome(u.nome) : (u.congregacao || '')
+    const { data } = await supabase.from('usuarios').select(campo).neq('id', u.id).limit(300)
+    let pool = [...new Set((data || []).map((x) => porNome ? primeiroNome(x[campo] || '') : (x[campo] || '')).filter((v) => v && v !== correta))]
+    pool = pool.sort(() => Math.random() - 0.5).slice(0, 4)
+    const opcoes = [...pool, correta].sort(() => Math.random() - 0.5)
+    return { campo: porNome ? 'nome' : 'congregação', correta, opcoes }
+  }
 
-    if (!resp) throw new Error('Sem conexão com o servidor.')
-    const data = await resp.json().catch(() => ({}))
-    if (!resp.ok) throw new Error(data.error || 'Erro ao enviar o código.')
-    return { nome: data.nome, devCodigo: data.dev_codigo }
+  // Passo 1: busca o usuário e decide o desafio de acesso conforme a função
+  const iniciarLogin = useCallback(async (telefone) => {
+    const digitos = soDigitos(telefone)
+    const { data: u, error } = await supabase.from('usuarios')
+      .select('id, nome, telefone, congregacao, funcao, foto_url, ativo, codigo_acesso')
+      .eq('telefone', digitos).maybeSingle()
+    if (error) throw new Error('Erro ao consultar cadastro.')
+    if (!u) throw new Error('Telefone não cadastrado. Procure o coordenador.')
+    if (!u.ativo) throw new Error('Cadastro inativo. Procure o coordenador.')
+
+    const temSenha = !!(u.codigo_acesso && String(u.codigo_acesso).trim())
+    const nivel = NIVEL[u.funcao] ?? 0
+    if (temSenha) return { tipo: 'senha', usuario: pub(u) }                 // senha ativada para este usuário
+    if (nivel >= NIVEL.coordenador) return { tipo: 'direto', usuario: pub(u) } // admin/coord sem senha: bootstrap por telefone
+    if (u.funcao === 'capitao') return { tipo: 'desafio', usuario: pub(u), ...(await desafioCapitao(u)) }
+    return { tipo: 'direto', usuario: pub(u) }                              // voluntário: só telefone
   }, [])
 
-  // Passo 2: valida o código digitado e cria a sessão local
-  const verificarCodigo = useCallback(async (telefone, codigo) => {
-    const digitos = soDigitos(telefone)
-    const { data: u, error } = await supabase
-      .from('usuarios')
-      .select('*')
-      .eq('telefone', digitos)
-      .maybeSingle()
+  const verificarSenha = useCallback(async (telefone, senha) => {
+    const { data: u } = await supabase.from('usuarios').select('codigo_acesso').eq('telefone', soDigitos(telefone)).maybeSingle()
+    return !!u && String(u.codigo_acesso || '').trim() === String(senha).trim()
+  }, [])
 
-    if (error || !u) throw new Error('Cadastro não encontrado.')
-    if (!u.codigo_acesso || u.codigo_acesso !== String(codigo).trim())
-      throw new Error('Código incorreto.')
-    if (u.codigo_expira_em && new Date(u.codigo_expira_em) < new Date())
-      throw new Error('Código expirado. Solicite outro.')
-
-    // Limpa o código e marca último acesso
-    await supabase.from('usuarios')
-      .update({ codigo_acesso: null, codigo_expira_em: null, ultimo_acesso: new Date().toISOString() })
-      .eq('id', u.id)
-
-    // Log de acesso
-    supabase.from('logs_acesso').insert({
-      usuario_id: u.id, acao: 'login', detalhe: 'Login via código WhatsApp'
-    }).then(() => {}, () => {})
-
-    const sessao = {
-      id: u.id, nome: u.nome, telefone: u.telefone,
-      congregacao: u.congregacao, funcao: u.funcao, foto_url: u.foto_url
-    }
+  // cria a sessão local
+  const entrar = useCallback((u) => {
+    const sessao = pub(u)
+    supabase.from('usuarios').update({ ultimo_acesso: new Date().toISOString() }).eq('id', u.id).then(() => {}, () => {})
+    supabase.from('logs_acesso').insert({ usuario_id: u.id, acao: 'login', detalhe: 'Login por telefone' }).then(() => {}, () => {})
     persistir(sessao)
     return sessao
   }, [persistir])
 
-  const logout = useCallback(() => {
-    persistir(null)
-    localStorage.removeItem('indicador360_evento')
-  }, [persistir])
-
-  const temNivel = useCallback((minimo) => {
-    if (!usuario) return false
-    return (NIVEL[usuario.funcao] ?? 0) >= (NIVEL[minimo] ?? 0)
-  }, [usuario])
+  const logout = useCallback(() => { persistir(null); localStorage.removeItem('indicador360_evento') }, [persistir])
+  const temNivel = useCallback((m) => { if (!usuario) return false; return (NIVEL[usuario.funcao] ?? 0) >= (NIVEL[m] ?? 0) }, [usuario])
 
   const valor = {
-    usuario, carregando,
-    solicitarCodigo, verificarCodigo, logout, temNivel,
-    isAdmin: temNivel('admin'),
-    isCoordenador: temNivel('coordenador'),
-    isCapitao: temNivel('capitao')
+    usuario, carregando, iniciarLogin, verificarSenha, entrar, logout, temNivel,
+    isAdmin: temNivel('admin'), isCoordenador: temNivel('coordenador'), isCapitao: temNivel('capitao')
   }
-
   return <AuthContext.Provider value={valor}>{children}</AuthContext.Provider>
 }

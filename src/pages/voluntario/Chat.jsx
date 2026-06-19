@@ -52,12 +52,13 @@ export default function Chat({ admin = false }) {
   const conv = convs.find((c) => c.id === canalId)
   const podeApagarTudo = temNivel('coordenador') // coordenador/admin apaga qualquer mensagem/conversa
 
-  // limpa uma conversa inteira (apaga as mensagens para todos) — só coord/admin
+  // apaga a conversa (para todos). DM: remove o canal (some da lista). Grupo: limpa as mensagens.
   async function apagarConversa(c) {
-    if (!confirm(`Limpar a conversa "${c.nome}" para todos? As mensagens serão apagadas.`)) return
     await supabase.from('mensagens').delete().eq('canal_id', c.id)
+    if (c.dm) await supabase.from('canais').delete().eq('id', c.id)
     if (canalId === c.id) setCanalId(null)
-    toast.success('Conversa limpa.')
+    setConvs((cs) => cs.filter((x) => x.id !== c.id))
+    toast.success(c.dm ? 'Conversa apagada.' : 'Conversa limpa.')
     carregar()
   }
 
@@ -92,8 +93,10 @@ export default function Chat({ admin = false }) {
       if (dm) { const outro = (c.participantes || []).find((id) => id !== usuario.id); nome = (us || []).find((u) => u.id === outro)?.nome || 'Conversa' }
       return { id: c.id, nome, dm, grupo: c.grupo, ultima: ult, ultimaEm: ult?.created_at || c.created_at, naoLidas: count || 0 }
     }))
-    lista.sort((a, b) => new Date(b.ultimaEm) - new Date(a.ultimaEm))
-    setConvs(lista)
+    // DM só aparece se tiver mensagem (conversa em branco não fica na lista)
+    const visiveisLista = lista.filter((c) => !c.dm || c.ultima)
+    visiveisLista.sort((a, b) => new Date(b.ultimaEm) - new Date(a.ultimaEm))
+    setConvs(visiveisLista)
     if (!autoSelecionado.current && !admin) {
       autoSelecionado.current = true
       const naoLida = lista.find((c) => c.naoLidas > 0)

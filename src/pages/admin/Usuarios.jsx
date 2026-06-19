@@ -8,7 +8,7 @@ import { exportarCSV } from '../../lib/csv'
 import Modal from '../../components/Modal'
 
 const FUNCOES = ['voluntario', 'capitao', 'coordenador', 'admin']
-const vazio = { nome: '', telefone: '', congregacao: '', funcao: 'voluntario' }
+const vazio = { nome: '', telefone: '', congregacao: '', funcao: 'voluntario', senha: '' }
 
 export default function Usuarios() {
   const [usuarios, setUsuarios] = useState([])
@@ -42,7 +42,7 @@ export default function Usuarios() {
   function abrirNovo() { setEditando(null); setForm(vazio); setModal(true) }
   function abrirEditar(u) {
     setEditando(u)
-    setForm({ nome: u.nome, telefone: u.telefone, congregacao: u.congregacao || '', funcao: u.funcao })
+    setForm({ nome: u.nome, telefone: u.telefone, congregacao: u.congregacao || '', funcao: u.funcao, senha: '' })
     setModal(true)
   }
 
@@ -50,7 +50,9 @@ export default function Usuarios() {
     e.preventDefault()
     if (!form.nome.trim() || soDigitos(form.telefone).length < 10)
       return toast.error('Preencha nome e WhatsApp válido.')
-    const dados = { ...form, telefone: soDigitos(form.telefone) }
+    const { senha, ...resto } = form
+    const dados = { ...resto, telefone: soDigitos(form.telefone) }
+    if (senha != null && senha !== '') dados.codigo_acesso = senha.trim() // ativa senha
     const { error } = editando
       ? await supabase.from('usuarios').update(dados).eq('id', editando.id)
       : await supabase.from('usuarios').insert(dados)
@@ -188,6 +190,12 @@ export default function Usuarios() {
             <select className="input capitalize" value={form.funcao} onChange={(e) => setForm({ ...form, funcao: e.target.value })}>
               {FUNCOES.map((f) => <option key={f} value={f}>{f}</option>)}
             </select>
+          </div>
+          <div>
+            <label className="label">Senha de acesso (opcional)</label>
+            <input className="input" type="text" value={form.senha} onChange={(e) => setForm({ ...form, senha: e.target.value })}
+              placeholder={editando ? 'deixe em branco para não alterar' : 'sem senha = acesso por telefone'} />
+            <p className="text-[11px] text-gray-400 mt-1">Admin entra com senha. Se definir senha para capitão/voluntário, ele passa a entrar com senha em vez do padrão (telefone/desafio).</p>
           </div>
           <button className="btn-primary w-full">{editando ? 'Salvar' : 'Criar'}</button>
         </form>

@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { useAuth } from '../contexts/AuthContext'
 
-// Máscara (38) 99999-9999
 function mascararTelefone(v) {
   const d = v.replace(/\D/g, '').slice(0, 11)
   if (d.length <= 2) return d.replace(/(\d{0,2})/, '($1')
@@ -12,61 +11,45 @@ function mascararTelefone(v) {
 }
 
 export default function Login() {
-  const { solicitarCodigo, verificarCodigo } = useAuth()
+  const { iniciarLogin, verificarSenha, entrar } = useAuth()
   const navigate = useNavigate()
 
-  const [etapa, setEtapa] = useState('telefone') // 'telefone' | 'codigo'
+  const [etapa, setEtapa] = useState('telefone') // telefone | senha | desafio
   const [telefone, setTelefone] = useState('')
-  const [codigo, setCodigo] = useState('')
-  const [nome, setNome] = useState('')
+  const [senha, setSenha] = useState('')
   const [enviando, setEnviando] = useState(false)
+  const [pendente, setPendente] = useState(null) // { usuario, campo, correta, opcoes }
 
-  async function enviarCodigo(e) {
+  async function continuar(e) {
     e?.preventDefault()
-    if (telefone.replace(/\D/g, '').length < 10) {
-      toast.error('Digite o WhatsApp completo com DDD.')
-      return
-    }
+    if (telefone.replace(/\D/g, '').length < 10) return toast.error('Digite o WhatsApp completo com DDD.')
     setEnviando(true)
     try {
-      const { nome, devCodigo } = await solicitarCodigo(telefone)
-      setNome(nome)
-      setEtapa('codigo')
-      if (devCodigo) {
-        // Modo de teste do servidor (sem credenciais Meta ainda)
-        setCodigo(devCodigo)
-        toast.success(`Código (teste): ${devCodigo}`, { duration: 8000 })
-      } else {
-        toast.success('Código enviado para o seu WhatsApp!')
-      }
-    } catch (err) {
-      toast.error(err.message)
-    } finally {
-      setEnviando(false)
-    }
+      const r = await iniciarLogin(telefone)
+      setPendente(r)
+      if (r.tipo === 'direto') { entrar(r.usuario); toast.success(`Bem-vindo, ${r.usuario.nome.split(' ')[0]}!`); navigate('/eventos', { replace: true }) }
+      else if (r.tipo === 'senha') setEtapa('senha')
+      else setEtapa('desafio')
+    } catch (err) { toast.error(err.message) } finally { setEnviando(false) }
   }
 
-  async function entrar(e) {
+  async function entrarSenha(e) {
     e?.preventDefault()
-    if (codigo.trim().length !== 6) {
-      toast.error('O código tem 6 dígitos.')
-      return
-    }
     setEnviando(true)
     try {
-      await verificarCodigo(telefone, codigo)
-      toast.success('Bem-vindo!')
-      navigate('/eventos', { replace: true })
-    } catch (err) {
-      toast.error(err.message)
-    } finally {
-      setEnviando(false)
-    }
+      const ok = await verificarSenha(telefone, senha)
+      if (!ok) return toast.error('Senha incorreta.')
+      entrar(pendente.usuario); navigate('/eventos', { replace: true })
+    } finally { setEnviando(false) }
+  }
+
+  function escolher(opcao) {
+    if (opcao === pendente.correta) { entrar(pendente.usuario); navigate('/eventos', { replace: true }) }
+    else toast.error('Opção incorreta. Tente novamente.')
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-6 py-10
-                    bg-gradient-to-b from-primary to-[#0d4178]">
+    <div className="min-h-screen flex flex-col items-center justify-center px-6 py-10 bg-gradient-to-b from-primary to-[#0d4178]">
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center mb-8 text-white">
           <img src="/logo.svg" alt="Indicador360" className="w-24 drop-shadow-lg" />
@@ -76,64 +59,51 @@ export default function Login() {
 
         <div className="card !p-6">
           {etapa === 'telefone' && (
-            <form onSubmit={enviarCodigo} className="space-y-5">
+            <form onSubmit={continuar} className="space-y-5">
               <div>
                 <label className="label text-base">Seu WhatsApp</label>
-                <input
-                  className="input !min-h-[56px] text-xl text-center tracking-wide"
-                  inputMode="numeric"
-                  placeholder="(38) 99999-9999"
-                  value={telefone}
-                  onChange={(e) => setTelefone(mascararTelefone(e.target.value))}
-                  autoFocus
-                />
+                <input className="input !min-h-[56px] text-xl text-center tracking-wide" inputMode="numeric"
+                  placeholder="(38) 99999-9999" value={telefone} autoFocus
+                  onChange={(e) => setTelefone(mascararTelefone(e.target.value))} />
               </div>
-              <button type="submit" disabled={enviando}
-                className="btn-primary btn-lg w-full text-xl">
-                {enviando ? 'Gerando…' : 'Entrar'}
+              <button type="submit" disabled={enviando} className="btn-primary btn-lg w-full text-xl">
+                {enviando ? 'Entrando…' : 'Entrar'}
               </button>
-              <p className="text-center text-sm text-gray-500">
-                Você receberá um código de 6 dígitos no WhatsApp.
-              </p>
+              <p className="text-center text-sm text-gray-500">Use o número cadastrado pelo coordenador.</p>
             </form>
           )}
 
-          {etapa === 'codigo' && (
-            <form onSubmit={entrar} className="space-y-5">
+          {etapa === 'senha' && (
+            <form onSubmit={entrarSenha} className="space-y-5">
               <p className="text-center text-gray-700 dark:text-slate-200">
-                Olá, <strong>{nome}</strong>! Digite o código enviado para
-                <br /><span className="font-semibold">{telefone}</span>
+                Olá, <strong>{pendente?.usuario?.nome?.split(' ')[0]}</strong>! Digite sua senha.
               </p>
-              <input
-                className="input !min-h-[56px] text-3xl text-center tracking-[0.5em] font-bold"
-                inputMode="numeric"
-                maxLength={6}
-                placeholder="000000"
-                value={codigo}
-                onChange={(e) => setCodigo(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                autoFocus
-              />
-              <button type="submit" disabled={enviando}
-                className="btn-primary btn-lg w-full text-xl">
-                {enviando ? 'Validando…' : 'Confirmar código'}
+              <input type="password" className="input !min-h-[56px] text-xl text-center" placeholder="Senha"
+                value={senha} autoFocus onChange={(e) => setSenha(e.target.value)} />
+              <button type="submit" disabled={enviando} className="btn-primary btn-lg w-full text-xl">
+                {enviando ? 'Verificando…' : 'Entrar'}
               </button>
-              <div className="flex flex-col gap-2 text-center text-sm">
-                <button type="button" onClick={enviarCodigo} disabled={enviando}
-                  className="text-primary font-semibold">
-                  Não recebeu? Reenviar código
-                </button>
-                <button type="button" onClick={() => { setEtapa('telefone'); setCodigo('') }}
-                  className="text-gray-500 underline">
-                  Trocar número
-                </button>
-              </div>
+              <button type="button" onClick={() => { setEtapa('telefone'); setSenha('') }} className="text-gray-500 underline w-full text-sm">Trocar número</button>
             </form>
+          )}
+
+          {etapa === 'desafio' && pendente && (
+            <div className="space-y-4">
+              <p className="text-center text-gray-700 dark:text-slate-200">
+                Olá, <strong>{pendente.usuario.nome.split(' ')[0]}</strong>! Para confirmar, escolha
+                {pendente.campo === 'nome' ? ' o seu primeiro nome:' : ' a sua congregação:'}
+              </p>
+              <div className="grid gap-2">
+                {pendente.opcoes.map((op, i) => (
+                  <button key={i} onClick={() => escolher(op)} className="btn-ghost btn-lg w-full text-lg">{op || '—'}</button>
+                ))}
+              </div>
+              <button type="button" onClick={() => { setEtapa('telefone'); setPendente(null) }} className="text-gray-500 underline w-full text-sm">Trocar número</button>
+            </div>
           )}
         </div>
 
-        <p className="text-center text-white/70 text-sm mt-6">
-          Cadastro feito pelo coordenador. Sem senha.
-        </p>
+        <p className="text-center text-white/70 text-sm mt-6">Sem senha para voluntários. Cadastro feito pelo coordenador.</p>
       </div>
     </div>
   )

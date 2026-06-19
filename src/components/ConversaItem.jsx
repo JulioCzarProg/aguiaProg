@@ -11,6 +11,7 @@ export default function ConversaItem({ conv, ativo, onAbrir, onApagar, horaCurta
   function down(e) {
     if (!onApagar) return
     start.current = e.clientX; moveu.current = false
+    e.currentTarget.setPointerCapture?.(e.pointerId)
   }
   function move(e) {
     if (start.current == null) return
@@ -33,9 +34,9 @@ export default function ConversaItem({ conv, ativo, onAbrir, onApagar, horaCurta
         </button>
       )}
       <button
-        onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerLeave={up}
+        onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerLeave={up} onPointerCancel={up}
         onClick={() => { if (!moveu.current) { if (dx < 0) setDx(0); else onAbrir(conv.id) } }}
-        style={{ transform: `translateX(${dx}px)`, transition: start.current == null ? 'transform .18s' : 'none' }}
+        style={{ transform: `translateX(${dx}px)`, transition: start.current == null ? 'transform .18s' : 'none', touchAction: 'pan-y' }}
         className={`w-full flex items-center gap-3 px-3 py-2.5 text-left bg-white dark:bg-slate-800 ${ativo ? 'bg-blue-50 dark:bg-slate-700' : 'hover:bg-gray-50 dark:hover:bg-slate-700/50'}`}>
         <div className={`w-10 h-10 rounded-full grid place-items-center text-white shrink-0 ${conv.dm ? 'bg-secundaria' : 'bg-primary'}`}>
           {conv.dm ? <User size={18} /> : <Users size={18} />}
