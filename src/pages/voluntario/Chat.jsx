@@ -6,6 +6,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useEvento } from '../../contexts/EventoContext'
 import { useChat } from '../../hooks/useChat'
 import ChatBubble from '../../components/ChatBubble'
+import ConversaItem from '../../components/ConversaItem'
 import AudioRecorder from '../../components/AudioRecorder'
 import Modal from '../../components/Modal'
 
@@ -47,8 +48,18 @@ export default function Chat({ admin = false }) {
   const fimRef = useRef(null)
   const autoSelecionado = useRef(false)
 
-  const { mensagens, enviarTexto, enviarArquivo } = useChat(canalId)
+  const { mensagens, enviarTexto, enviarArquivo, apagarMensagem } = useChat(canalId)
   const conv = convs.find((c) => c.id === canalId)
+  const podeApagarTudo = temNivel('coordenador') // coordenador/admin apaga qualquer mensagem/conversa
+
+  // limpa uma conversa inteira (apaga as mensagens para todos) — só coord/admin
+  async function apagarConversa(c) {
+    if (!confirm(`Limpar a conversa "${c.nome}" para todos? As mensagens serão apagadas.`)) return
+    await supabase.from('mensagens').delete().eq('canal_id', c.id)
+    if (canalId === c.id) setCanalId(null)
+    toast.success('Conversa limpa.')
+    carregar()
+  }
 
   const carregar = useCallback(async () => {
     if (!evento) return
@@ -150,24 +161,14 @@ export default function Chat({ admin = false }) {
         </div>
         <div className="flex-1 overflow-y-auto">
           {convs.map((c) => (
-            <button key={c.id} onClick={() => setCanalId(c.id)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 text-left border-b dark:border-slate-700/50 ${c.id === canalId ? 'bg-blue-50 dark:bg-slate-700' : 'hover:bg-gray-50 dark:hover:bg-slate-700/50'}`}>
-              <div className={`w-10 h-10 rounded-full grid place-items-center text-white shrink-0 ${c.dm ? 'bg-secundaria' : 'bg-primary'}`}>
-                {c.dm ? <User size={18} /> : <Users size={18} />}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold truncate flex-1">{c.nome}</span>
-                  <span className="text-[11px] text-gray-400">{horaCurta(c.ultimaEm)}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-gray-500 truncate flex-1">{c.ultima?.nome_autor ? `${c.ultima.nome_autor.split(' ')[0]}: ` : ''}{previa(c.ultima)}</span>
-                  {c.naoLidas > 0 && <span className="bg-secundaria text-white text-[11px] rounded-full min-w-[20px] h-5 grid place-items-center px-1">{c.naoLidas}</span>}
-                </div>
-              </div>
-            </button>
+            <ConversaItem key={c.id} conv={c} ativo={c.id === canalId}
+              onAbrir={setCanalId} horaCurta={horaCurta} previa={previa}
+              onApagar={podeApagarTudo ? apagarConversa : undefined} />
           ))}
           {convs.length === 0 && <p className="text-center text-gray-400 text-sm mt-8">Nenhuma conversa.</p>}
+          {podeApagarTudo && convs.length > 0 && (
+            <p className="text-center text-[11px] text-gray-400 mt-2 px-2">Arraste uma conversa para a esquerda para apagar.</p>
+          )}
         </div>
       </div>
 
@@ -185,7 +186,8 @@ export default function Chat({ admin = false }) {
 
           <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-gray-50/50 dark:bg-slate-900/30">
             {mensagens.length === 0 && <p className="text-center text-gray-400 mt-8">Sem mensagens.</p>}
-            {mensagens.map((m) => <ChatBubble key={m.id} msg={m} proprio={m.usuario_id === usuario.id} />)}
+            {mensagens.map((m) => <ChatBubble key={m.id} msg={m} proprio={m.usuario_id === usuario.id}
+              podeApagarTudo={podeApagarTudo} onApagar={apagarMensagem} />)}
             <div ref={fimRef} />
           </div>
 

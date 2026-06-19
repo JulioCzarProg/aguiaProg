@@ -57,9 +57,24 @@ export function useChat(canalId) {
           setMensagens((prev) => [...prev, m])
           if (m.urgente && m.usuario_id !== usuario?.id) tocarAlerta()
         })
+      .on('postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'mensagens' },
+        (payload) => {
+          const id = payload.old?.id
+          if (!id) return
+          idsRef.current.delete(id)
+          setMensagens((prev) => prev.filter((x) => x.id !== id))
+        })
       .subscribe()
     return () => { supabase.removeChannel(canal) }
   }, [canalId, usuario?.id])
+
+  // Apaga uma mensagem (apaga para todos via realtime DELETE)
+  const apagarMensagem = useCallback(async (id) => {
+    setMensagens((prev) => prev.filter((x) => x.id !== id))
+    idsRef.current.delete(id)
+    await supabase.from('mensagens').delete().eq('id', id)
+  }, [])
 
   const enviarTexto = useCallback(async (texto, urgente = false) => {
     if (!texto?.trim()) return
@@ -81,5 +96,5 @@ export function useChat(canalId) {
     })
   }, [canalId, usuario])
 
-  return { mensagens, carregando, enviarTexto, enviarArquivo }
+  return { mensagens, carregando, enviarTexto, enviarArquivo, apagarMensagem }
 }

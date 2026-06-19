@@ -21,6 +21,7 @@ export default function Configuracoes() {
   const [formEvento, setFormEvento] = useState(eventoVazio)
   const [editandoEvento, setEditandoEvento] = useState(null)
   const [confirmLimpar, setConfirmLimpar] = useState(false)
+  const [confirmPessoas, setConfirmPessoas] = useState(false)
   const [senha, setSenha] = useState('')
 
   useEffect(() => { carregarEventos() }, [])
@@ -81,6 +82,30 @@ export default function Configuracoes() {
     setConfirmLimpar(false); setSenha('')
   }
 
+  // ---- Limpezas específicas ----
+  async function limparChats() {
+    if (!confirm('Apagar TODAS as conversas (mensagens) deste evento? Não pode ser desfeito.')) return
+    const { data: cs } = await supabase.from('canais').select('id').eq('evento_id', evento?.id)
+    const ids = (cs || []).map((c) => c.id)
+    if (ids.length) await supabase.from('mensagens').delete().in('canal_id', ids)
+    toast.success('Conversas apagadas.')
+  }
+  async function limparAlertas() {
+    if (!confirm('Limpar os alertas/avisos ativos deste evento?')) return
+    await supabase.from('avisos').delete().eq('evento_id', evento?.id)
+    toast.success('Alertas limpos.')
+  }
+  async function apagarProgramacaoEPessoas() {
+    if (senha !== 'APAGAR') return toast.error('Digite APAGAR para confirmar.')
+    // remove a programação (designações) e os voluntários/capitães (mantém coordenadores/admin)
+    await supabase.from('designacoes').delete().eq('evento_id', evento?.id)
+    await supabase.from('contagens').delete().eq('evento_id', evento?.id)
+    await supabase.from('localizacoes').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+    await supabase.from('usuarios').delete().in('funcao', ['voluntario', 'capitao'])
+    toast.success('Programação e voluntários/capitães apagados (coordenadores/admin mantidos).')
+    setConfirmLimpar(false); setSenha('')
+  }
+
   return (
     <div className="space-y-5 max-w-3xl">
       <h1 className="text-2xl font-bold">Configurações</h1>
@@ -135,9 +160,14 @@ export default function Configuracoes() {
         <h2 className="font-semibold">Dados</h2>
         <div className="flex gap-2 flex-wrap">
           <button onClick={backup} className="btn-secundaria"><Save size={16} /> Backup completo (JSON)</button>
-          <button onClick={() => setConfirmLimpar(true)} className="btn-urgencia"><Trash2 size={16} /> Limpar dados operacionais</button>
+          <button onClick={limparChats} className="btn-ghost"><Trash2 size={16} /> Limpar conversas</button>
+          <button onClick={limparAlertas} className="btn-ghost"><Trash2 size={16} /> Limpar alertas ativos</button>
         </div>
-        <p className="text-xs text-gray-400">O backup exporta todas as tabelas. A limpeza remove mensagens, contagens, designações, localizações, reuniões, canais e setores — mantém usuários e eventos.</p>
+        <div className="flex gap-2 flex-wrap pt-1">
+          <button onClick={() => setConfirmLimpar(true)} className="btn-urgencia"><Trash2 size={16} /> Limpar dados operacionais</button>
+          <button onClick={() => setConfirmPessoas(true)} className="btn-urgencia"><Trash2 size={16} /> Apagar programação + voluntários/capitães</button>
+        </div>
+        <p className="text-xs text-gray-400">Backup exporta tudo. "Limpar conversas" apaga as mensagens; "Limpar alertas" apaga os avisos. "Dados operacionais" remove mensagens, contagens, designações, localizações, reuniões, canais e setores (mantém usuários). "Apagar programação + voluntários/capitães" remove as designações e os usuários voluntário/capitão (mantém coordenadores/admin). Tudo é irreversível.</p>
       </div>
 
       {/* Modal evento */}
@@ -166,6 +196,19 @@ export default function Configuracoes() {
         <div className="flex gap-2">
           <button onClick={() => setConfirmLimpar(false)} className="btn-ghost flex-1">Cancelar</button>
           <button onClick={limparDados} className="btn-urgencia flex-1">Apagar dados</button>
+        </div>
+      </Modal>
+
+      {/* Modal apagar programação + voluntários/capitães */}
+      <Modal aberto={confirmPessoas} titulo="⚠️ Apagar programação + pessoas" onFechar={() => setConfirmPessoas(false)}>
+        <p className="text-sm text-gray-600 dark:text-slate-300 mb-3">
+          Isto apaga <b>todas as designações (programação)</b> e <b>todos os voluntários e capitães</b>
+          (coordenadores e admin são mantidos). Irreversível. Digite <b>APAGAR</b> para confirmar.
+        </p>
+        <input className="input mb-3" value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="APAGAR" />
+        <div className="flex gap-2">
+          <button onClick={() => setConfirmPessoas(false)} className="btn-ghost flex-1">Cancelar</button>
+          <button onClick={apagarProgramacaoEPessoas} className="btn-urgencia flex-1">Apagar tudo</button>
         </div>
       </Modal>
     </div>

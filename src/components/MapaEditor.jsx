@@ -163,8 +163,10 @@ export default function MapaEditor({
         </defs>
 
         {/* Fundo: o MESMO mapa da visualização, por camada
-            (camada 1 = arquibancadas; camada 2 = planta interna) */}
-        <image href={camada === 2 ? '/planta-interna.svg' : '/mapa-arquibancadas.svg'}
+            (camada 1 = arquibancadas; camada 2 = planta interna em PNG p/ mobile).
+            href + xlinkHref para compatibilidade com Safari/iOS. */}
+        <image href={camada === 2 ? '/planta-interna.png' : '/mapa-arquibancadas.svg'}
+          xlinkHref={camada === 2 ? '/planta-interna.png' : '/mapa-arquibancadas.svg'}
           x="0" y="0" width={SZ} height={SZ} preserveAspectRatio="xMidYMid meet" />
 
         {/* Elementos editáveis: setores, blocos de cadeiras, palco, tela */}
