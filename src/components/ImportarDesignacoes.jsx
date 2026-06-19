@@ -29,7 +29,7 @@ export default function ImportarDesignacoes({ evento, onConcluido }) {
     if (!evento) return toast.error('Selecione um evento.')
     setGravando(true)
     try {
-      const { setores, pessoas, designacoes } = parsed
+      const { setores, pessoas, designacoes, capitaes = [] } = parsed
 
       // Setores: substitui os do evento
       await supabase.from('setores').delete().eq('evento_id', evento.id)
@@ -57,7 +57,15 @@ export default function ImportarDesignacoes({ evento, onConcluido }) {
         if (error) throw error
       }
 
-      toast.success(`Importado: ${setIns.length} setores, ${pesIns.length} voluntários, ${linhas.length} designações.`)
+      // Capitães: designa cada um ao setor representante do seu grupo, no turno
+      const repPorGrupo = {}
+      for (const s of setores) { if (s.grupo && !repPorGrupo[s.grupo]) repPorGrupo[s.grupo] = setorPorCodigo[s.codigo] }
+      const linhasCap = capitaes
+        .map((c) => ({ evento_id: evento.id, usuario_id: usuarioPorTel[c.telefone], setor_id: repPorGrupo[c.grupo], turno: c.turno }))
+        .filter((d) => d.usuario_id && d.setor_id)
+      if (linhasCap.length) await supabase.from('designacoes').insert(linhasCap)
+
+      toast.success(`Importado: ${setIns.length} setores, ${pesIns.length} voluntários, ${linhas.length + linhasCap.length} designações.`)
       setParsed(null)
       onConcluido?.()
     } catch (err) {

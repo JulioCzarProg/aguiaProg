@@ -76,7 +76,8 @@ export default function Chat({ admin = false }) {
       if (c.tipo === 'dm') return (c.participantes || []).includes(usuario.id)
       if (admin) return true
       if (nivel < (NIVEL[c.nivel_minimo] ?? 0)) return false
-      if (c.grupo) return meusGrupos.has(c.grupo) || nivel >= NIVEL.capitao
+      // canal de equipe: capitão vê só o seu grupo; coordenador+ vê todos
+      if (c.grupo) return meusGrupos.has(c.grupo) || nivel >= NIVEL.coordenador
       return true
     })
     // metadados (última mensagem + não lidas)

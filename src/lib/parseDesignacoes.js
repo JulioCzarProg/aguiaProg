@@ -29,6 +29,7 @@ export function parseDesignacoes(abas) {
   const setores = new Map()      // codigo -> {codigo, nome, cor, grupo}
   const pessoas = new Map()      // telefone -> {nome, telefone, congregacao, funcao}
   const designacoes = []         // {telefone, setorCodigo, turno}
+  const capitaes = []            // {telefone, turno, grupo}
   const turnosDetectados = []
 
   function addPessoa(nome, contato, congregacao, funcao = 'voluntario') {
@@ -64,7 +65,8 @@ export function parseDesignacoes(abas) {
 
       // Linha do capitão do grupo (logo após o cabeçalho)
       if (aguardandoCapitao && !c0 && c2 && c2.toUpperCase() !== 'CAPITÃO') {
-        addPessoa(c2, c4, c3, 'capitao')
+        const tel = addPessoa(c2, c4, c3, 'capitao')
+        if (tel) capitaes.push({ telefone: tel, turno, grupo: grupoAtual?.nome || '' })
         aguardandoCapitao = false
         continue
       }
@@ -100,6 +102,7 @@ export function parseDesignacoes(abas) {
     setores: [...setores.values()],
     pessoas: [...pessoas.values()],
     designacoes: desigUnicas,
+    capitaes,
     turnosDetectados: [...new Set(turnosDetectados)]
   }
 }

@@ -17,7 +17,7 @@ const rot = (vx, vy, deg) => {
 }
 
 export default function MapaEditor({
-  setores = [], presencas = [], editavel = false, camada = 1,
+  setores = [], presencas = [], editavel = false, camada = 1, mapaUrl,
   onSetorClick, onUserClick, setorSelecionado, eventoId, recarregar
 }) {
   const [arr, setArr] = useState(setores)
@@ -165,9 +165,10 @@ export default function MapaEditor({
         {/* Fundo: o MESMO mapa da visualização, por camada
             (camada 1 = arquibancadas; camada 2 = planta interna em PNG p/ mobile).
             href + xlinkHref para compatibilidade com Safari/iOS. */}
-        <image href={camada === 2 ? '/planta-interna.png' : '/mapa-arquibancadas.svg'}
-          xlinkHref={camada === 2 ? '/planta-interna.png' : '/mapa-arquibancadas.svg'}
-          x="0" y="0" width={SZ} height={SZ} preserveAspectRatio="xMidYMid meet" />
+        {(() => {
+          const base = camada === 2 ? '/planta-interna.png' : (mapaUrl || '/mapa-arquibancadas.svg')
+          return <image href={base} xlinkHref={base} x="0" y="0" width={SZ} height={SZ} preserveAspectRatio="xMidYMid meet" />
+        })()}
 
         {/* Elementos editáveis: setores, blocos de cadeiras, palco, tela */}
         {visiveis.map((s) => {

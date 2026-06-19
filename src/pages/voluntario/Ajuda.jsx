@@ -29,10 +29,8 @@ function Item({ q, a }) {
 }
 
 export default function Ajuda() {
-  // Configuráveis pelo admin (Configurações) — valores padrão:
+  // Configurável pelo admin (Configurações) — valor padrão:
   const contato = localStorage.getItem('cfg_contato') || '5538999999999'
-  const video = localStorage.getItem('cfg_video') || 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-  const videoId = (video.match(/(?:v=|youtu\.be\/)([\w-]{11})/) || [])[1]
 
   return (
     <div className="p-4 space-y-4 max-w-lg mx-auto">
@@ -42,16 +40,6 @@ export default function Ajuda() {
         <div className="font-semibold mb-1">Perguntas frequentes</div>
         {FAQ.map((f, i) => <Item key={i} {...f} />)}
       </div>
-
-      {videoId && (
-        <div className="card">
-          <div className="font-semibold mb-2">Vídeo tutorial</div>
-          <div className="aspect-video rounded-xl overflow-hidden">
-            <iframe className="w-full h-full" src={`https://www.youtube.com/embed/${videoId}`}
-              title="Tutorial" allowFullScreen />
-          </div>
-        </div>
-      )}
 
       <a href={`https://wa.me/${contato}`} target="_blank" rel="noreferrer"
         className="btn-secundaria btn-lg w-full">

@@ -8,6 +8,7 @@ import { useContagem, periodoDoTurno } from '../../hooks/useContagem'
 import { useLocalizacao } from '../../hooks/useLocalizacao'
 import { corDe } from '../../components/cores'
 import ValidarContagens from '../../components/ValidarContagens'
+import HorariosResumo from '../../components/HorariosResumo'
 
 export default function MeuSetor() {
   const { usuario, temNivel } = useAuth()
@@ -121,6 +122,10 @@ export default function MeuSetor() {
           </div>
         </div>
       </div>
+
+      {/* Horário de contagem (turnos do usuário; coordenador+ vê todos) */}
+      <HorariosResumo evento={evento}
+        turnos={temNivel('coordenador') ? undefined : [...new Set(designacoes.map((d) => d.turno).filter(Boolean))]} />
 
       {/* Validação (capitães e acima) */}
       {temNivel('capitao') && <ValidarContagens evento={evento} usuario={usuario} />}

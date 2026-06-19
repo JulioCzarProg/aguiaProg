@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Sun, Moon, Save, Trash2, Plus } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { supabase } from '../../supabase'
+import { supabase, uploadArquivo } from '../../supabase'
 import { useEvento } from '../../contexts/EventoContext'
 import { baixarJSON } from '../../lib/csv'
 import FotoUpload from '../../components/FotoUpload'
@@ -9,7 +9,7 @@ import Modal from '../../components/Modal'
 import HorariosContagemConfig from '../../components/HorariosContagemConfig'
 
 const TABELAS = ['eventos', 'setores', 'usuarios', 'designacoes', 'localizacoes', 'canais', 'mensagens', 'contagens', 'reunioes', 'reuniao_participantes', 'logs_acesso']
-const eventoVazio = { nome: '', tipo: 'congresso', local: '', data_inicio: '', data_fim: '', ativo: true }
+const eventoVazio = { nome: '', tipo: 'congresso', local: '', data_inicio: '', data_fim: '', ativo: true, mapa_url: null }
 
 export default function Configuracoes() {
   const { evento, setEvento, eventos, carregarEventos } = useEvento()
@@ -23,6 +23,19 @@ export default function Configuracoes() {
   const [confirmLimpar, setConfirmLimpar] = useState(false)
   const [confirmPessoas, setConfirmPessoas] = useState(false)
   const [senha, setSenha] = useState('')
+  const [enviandoMapa, setEnviandoMapa] = useState(false)
+
+  async function enviarMapa(e) {
+    const file = e.target.files?.[0]; if (!file) return
+    setEnviandoMapa(true)
+    try {
+      const ext = '.' + (file.name.split('.').pop() || 'svg')
+      const url = await uploadArquivo('logos', file, ext)
+      setFormEvento((f) => ({ ...f, mapa_url: url }))
+      toast.success('Mapa carregado!')
+    } catch { toast.error('Falha ao enviar o mapa.') }
+    finally { setEnviandoMapa(false); e.target.value = '' }
+  }
 
   useEffect(() => { carregarEventos() }, [])
 
@@ -42,7 +55,7 @@ export default function Configuracoes() {
   function novoEvento() { setEditandoEvento(null); setFormEvento(eventoVazio); setModalEvento(true) }
   function editarEvento(ev) {
     setEditandoEvento(ev)
-    setFormEvento({ nome: ev.nome, tipo: ev.tipo, local: ev.local || '', data_inicio: ev.data_inicio || '', data_fim: ev.data_fim || '', ativo: ev.ativo })
+    setFormEvento({ nome: ev.nome, tipo: ev.tipo, local: ev.local || '', data_inicio: ev.data_inicio || '', data_fim: ev.data_fim || '', ativo: ev.ativo, mapa_url: ev.mapa_url || null })
     setModalEvento(true)
   }
   async function salvarEvento(e) {
@@ -183,6 +196,20 @@ export default function Configuracoes() {
           <div className="grid grid-cols-2 gap-3">
             <div><label className="label">Início</label><input type="date" className="input" value={formEvento.data_inicio} onChange={(e) => setFormEvento({ ...formEvento, data_inicio: e.target.value })} /></div>
             <div><label className="label">Fim</label><input type="date" className="input" value={formEvento.data_fim} onChange={(e) => setFormEvento({ ...formEvento, data_fim: e.target.value })} /></div>
+          </div>
+          <div>
+            <label className="label">Mapa do ginásio (SVG ou PNG)</label>
+            <div className="flex items-center gap-3">
+              {formEvento.mapa_url
+                ? <img src={formEvento.mapa_url} alt="mapa" className="w-16 h-16 object-contain rounded-lg border dark:border-slate-700" />
+                : <div className="w-16 h-16 rounded-lg bg-gray-100 dark:bg-slate-700 grid place-items-center text-xs text-gray-400">sem mapa</div>}
+              <label className="btn-ghost cursor-pointer">
+                {enviandoMapa ? 'Enviando…' : 'Carregar mapa'}
+                <input type="file" accept=".svg,.png,image/svg+xml,image/png" className="hidden" onChange={enviarMapa} />
+              </label>
+              {formEvento.mapa_url && <button type="button" onClick={() => setFormEvento({ ...formEvento, mapa_url: null })} className="text-sm text-urgencia">Remover</button>}
+            </div>
+            <p className="text-[11px] text-gray-400 mt-1">Usado como fundo do mapa deste evento. Se vazio, usa o mapa padrão.</p>
           </div>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={formEvento.ativo} onChange={(e) => setFormEvento({ ...formEvento, ativo: e.target.checked })} /> Ativo</label>
           <button className="btn-primary w-full">{editandoEvento ? 'Salvar' : 'Criar'}</button>

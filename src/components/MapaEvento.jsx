@@ -13,7 +13,7 @@ export default function MapaEvento({ evento, setores = [], locs = [], ...rest })
       const s = setores.find((x) => x.id === l.setor_id); if (!s) return null
       return { id: l.usuario_id, codigo: s.codigo, atrasado: (Date.now() - new Date(l.updated_at).getTime()) > ATRASO }
     }).filter(Boolean)
-    return <MapaEditor setores={setores} presencas={presencas} eventoId={evento.id}
+    return <MapaEditor setores={setores} presencas={presencas} eventoId={evento.id} mapaUrl={evento.mapa_url}
       editavel={rest.editavel} camada={rest.camada ?? 1} recarregar={rest.recarregar}
       onSetorClick={rest.onSetorClick} onUserClick={rest.onUserClick} setorSelecionado={rest.setorSelecionado} />
   }

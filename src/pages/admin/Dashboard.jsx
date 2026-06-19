@@ -3,6 +3,7 @@ import { supabase } from '../../supabase'
 import { useEvento } from '../../contexts/EventoContext'
 import { useRealtime } from '../../hooks/useRealtime'
 import MapaEvento from '../../components/MapaEvento'
+import HorariosResumo from '../../components/HorariosResumo'
 
 function Card({ titulo, valor, cor, sub }) {
   return (
@@ -62,6 +63,8 @@ export default function Dashboard() {
         <Card titulo="Contagem total" valor={stats.contagem} cor="#0d4178" sub="soma do evento" />
         <Card titulo="Alertas ativos" valor={alertas.length} cor="#A32D2D" />
       </div>
+
+      <HorariosResumo evento={evento} />
 
       <div className="grid lg:grid-cols-2 gap-5">
         <div className="card">
