@@ -18,7 +18,11 @@ export default function MeuSetor() {
   const [capitao, setCapitao] = useState(null)
   const [carregando, setCarregando] = useState(true)
 
-  const desSel = designacoes[idx]
+  // separa designações de SETOR (voluntário) das de ÁREA (capitão)
+  const setoresDesig = designacoes.filter((d) => (d.setores?.tipo || 'setor') !== 'area')
+  const minhasAreas = [...new Map(designacoes.filter((d) => d.setores?.tipo === 'area')
+    .map((d) => [d.setores.nome, { nome: d.setores.nome, turno: d.turno }])).values()]
+  const desSel = setoresDesig[idx]
   const setorAtual = desSel?.setores
   const turno = desSel?.turno || ''
   const periodo = periodoDoTurno(turno)
@@ -73,15 +77,31 @@ export default function MeuSetor() {
 
   if (carregando) return <div className="p-6 text-gray-400">Carregando…</div>
 
-  // capitães sem setor designado ainda podem validar/lançar
+  // Capitão: vê suas ÁREAS (não um setor) + validação/lançamento de contagem
   if (!setorAtual) {
+    if (minhasAreas.length || temNivel('capitao')) {
+      return (
+        <div className="p-4 space-y-4 max-w-lg mx-auto">
+          <div className="rounded-2xl overflow-hidden shadow">
+            <div className="p-5 text-white bg-secundaria">
+              <div className="text-sm opacity-90">Capitão de área</div>
+              <div className="text-2xl font-extrabold">{usuario.nome}</div>
+              {minhasAreas.length > 0 && (
+                <p className="text-sm opacity-95 mt-1">Áreas: {minhasAreas.map((a) => `${a.nome} (${a.turno})`).join(' • ')}</p>
+              )}
+            </div>
+          </div>
+          <HorariosResumo evento={evento} turnos={temNivel('coordenador') ? undefined : [...new Set(designacoes.map((d) => d.turno).filter(Boolean))]} />
+          <ValidarContagens evento={evento} usuario={usuario} />
+        </div>
+      )
+    }
     return (
       <div className="p-4 space-y-4 max-w-lg mx-auto">
         <div className="card text-center text-gray-500">
           <p className="text-lg">Você não tem setor designado neste evento.</p>
           <p className="text-sm mt-2">Procure seu coordenador.</p>
         </div>
-        {temNivel('capitao') && <ValidarContagens evento={evento} usuario={usuario} />}
       </div>
     )
   }
@@ -91,9 +111,9 @@ export default function MeuSetor() {
   return (
     <div className="p-4 space-y-4 max-w-lg mx-auto">
       {/* Seletor de designação (dia/turno) quando há mais de uma */}
-      {designacoes.length > 1 && (
+      {setoresDesig.length > 1 && (
         <div className="flex gap-2 overflow-x-auto pb-1">
-          {designacoes.map((d, i) => (
+          {setoresDesig.map((d, i) => (
             <button key={d.id} onClick={() => { setIdx(i); setQuantidade(0) }}
               className={`px-3 py-2 rounded-full text-sm whitespace-nowrap ${i === idx ? 'bg-primary text-white' : 'bg-white dark:bg-slate-800 border dark:border-slate-700'}`}>
               {d.setores?.codigo} • {d.turno}

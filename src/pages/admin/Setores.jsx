@@ -10,16 +10,36 @@ const vazio = { codigo: '', nome: '', descricao: '', cor: 'azul', capacidade: ''
 export default function Setores() {
   const { evento } = useEvento()
   const [setores, setSetores] = useState([])
+  const [areas, setAreas] = useState([])
+  const [novaArea, setNovaArea] = useState({ codigo: '', nome: '', cor: 'amarelo' })
   const [modal, setModal] = useState(false)
   const [editando, setEditando] = useState(null)
   const [form, setForm] = useState(vazio)
 
   async function carregar() {
     if (!evento) return
-    const { data } = await supabase.from('setores').select('*').eq('evento_id', evento.id).or('tipo.is.null,tipo.eq.setor').order('codigo')
-    setSetores(data || [])
+    const [{ data: st }, { data: ar }] = await Promise.all([
+      supabase.from('setores').select('*').eq('evento_id', evento.id).or('tipo.is.null,tipo.eq.setor').order('codigo'),
+      supabase.from('setores').select('*').eq('evento_id', evento.id).eq('tipo', 'area').order('codigo')
+    ])
+    setSetores(st || []); setAreas(ar || [])
   }
   useEffect(() => { carregar() }, [evento])
+
+  async function salvarArea() {
+    const codigo = novaArea.codigo.trim().toUpperCase()
+    if (!codigo || !novaArea.nome.trim()) return toast.error('Letra e nome da área são obrigatórios.')
+    const { error } = await supabase.from('setores').insert({
+      evento_id: evento.id, tipo: 'area', codigo, nome: novaArea.nome.trim(), descricao: novaArea.nome.trim(), cor: novaArea.cor
+    })
+    if (error) return toast.error(error.message)
+    toast.success('Área criada!'); setNovaArea({ codigo: '', nome: '', cor: 'amarelo' }); carregar()
+  }
+  async function excluirArea(a) {
+    if (!confirm(`Excluir a área ${a.codigo} (${a.nome})? As designações de capitão dessa área serão removidas.`)) return
+    await supabase.from('setores').delete().eq('id', a.id)
+    toast.success('Área excluída.'); carregar()
+  }
 
   function novo() { setEditando(null); setForm(vazio); setModal(true) }
   function editar(s) {
@@ -61,6 +81,26 @@ export default function Setores() {
       <div className="flex items-center gap-2">
         <h1 className="text-2xl font-bold flex-1">Setores</h1>
         <button onClick={novo} className="btn-primary">+ Novo setor</button>
+      </div>
+
+      {/* Áreas (a letra do código define a área; o capitão é designado por área) */}
+      <div className="card">
+        <div className="font-semibold mb-2 text-sm">Áreas</div>
+        <div className="flex flex-wrap gap-2 mb-3">
+          {areas.map((a) => (
+            <span key={a.id} className="inline-flex items-center gap-2 rounded-full pl-3 pr-2 py-1 text-white text-sm" style={{ background: corDe(a.cor).bg }}>
+              <b>{a.codigo}</b> {a.nome}
+              <button onClick={() => excluirArea(a)} className="bg-white/25 rounded-full w-5 h-5 leading-none" title="Excluir área">×</button>
+            </span>
+          ))}
+          {areas.length === 0 && <span className="text-sm text-gray-400">Nenhuma área. Crie abaixo.</span>}
+        </div>
+        <div className="flex flex-wrap items-end gap-2">
+          <div><label className="label">Letra</label><input className="input w-16 uppercase" maxLength={2} value={novaArea.codigo} onChange={(e) => setNovaArea({ ...novaArea, codigo: e.target.value })} placeholder="E" /></div>
+          <div className="flex-1 min-w-[160px]"><label className="label">Nome da área</label><input className="input" value={novaArea.nome} onChange={(e) => setNovaArea({ ...novaArea, nome: e.target.value })} placeholder="Ex.: Bistrô" /></div>
+          <button onClick={salvarArea} className="btn-ghost">+ Nova área</button>
+        </div>
+        <p className="text-[11px] text-gray-400 mt-2">Para transferir um setor de área, edite o código dele mudando a letra (ex.: C9 → E1). O setor passa a pertencer à área da nova letra.</p>
       </div>
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">

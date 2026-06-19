@@ -13,18 +13,20 @@ export default function Programacao() {
   const { evento } = useEvento()
   const [usuarios, setUsuarios] = useState([])
   const [setores, setSetores] = useState([])
+  const [areas, setAreas] = useState([])
   const [designacoes, setDesignacoes] = useState([])
   const [turno, setTurno] = useState(TURNOS[0])
   const [menu, setMenu] = useState(null) // {x,y,designacao}
 
   async function carregar() {
     if (!evento) return
-    const [{ data: us }, { data: st }, { data: ds }] = await Promise.all([
+    const [{ data: us }, { data: st }, { data: ar }, { data: ds }] = await Promise.all([
       supabase.from('usuarios').select('id, nome, congregacao, funcao').eq('ativo', true).order('nome'),
       supabase.from('setores').select('*').eq('evento_id', evento.id).or('tipo.is.null,tipo.eq.setor').order('codigo'),
+      supabase.from('setores').select('*').eq('evento_id', evento.id).eq('tipo', 'area').order('codigo'),
       supabase.from('designacoes').select('*').eq('evento_id', evento.id)
     ])
-    setUsuarios(us || []); setSetores(st || []); setDesignacoes(ds || [])
+    setUsuarios(us || []); setSetores(st || []); setAreas(ar || []); setDesignacoes(ds || [])
   }
   useEffect(() => { carregar() }, [evento])
   useEffect(() => {
@@ -41,7 +43,22 @@ export default function Programacao() {
   const contagemPorUsuario = {}
   noTurno.forEach((d) => { contagemPorUsuario[d.usuario_id] = (contagemPorUsuario[d.usuario_id] || 0) + 1 })
 
-  const disponiveis = usuarios.filter((u) => !designadosIds.has(u.id))
+  // capitães NÃO entram no pool de setores (são designados por ÁREA)
+  const disponiveis = usuarios.filter((u) => !designadosIds.has(u.id) && u.funcao !== 'capitao')
+  const capitaes = usuarios.filter((u) => u.funcao === 'capitao')
+  const capitaesDaArea = (areaId) => noTurno
+    .filter((d) => d.setor_id === areaId)
+    .map((d) => ({ ...d, usuario: usuarios.find((u) => u.id === d.usuario_id) }))
+    .filter((x) => x.usuario)
+  async function atribuirCapitao(areaId, usuarioId) {
+    if (!usuarioId || noTurno.some((d) => d.setor_id === areaId && d.usuario_id === usuarioId)) return
+    const { data } = await supabase.from('designacoes').insert({ evento_id: evento.id, usuario_id: usuarioId, setor_id: areaId, turno }).select().single()
+    if (data) setDesignacoes((prev) => [...prev, data])
+  }
+  async function removerCapitao(d) {
+    setDesignacoes((prev) => prev.filter((x) => x.id !== d.id))
+    await supabase.from('designacoes').delete().eq('id', d.id)
+  }
   const porSetor = (setorId) => noTurno
     .filter((d) => d.setor_id === setorId)
     .map((d) => ({ ...d, usuario: usuarios.find((u) => u.id === d.usuario_id) }))
@@ -113,6 +130,36 @@ export default function Programacao() {
           </button>
         ))}
       </div>
+
+      {/* Capitães por ÁREA (o capitão é da área, não do setor) */}
+      {areas.length > 0 && (
+        <div className="card">
+          <div className="font-semibold mb-2 text-sm">Capitães por área — {turno}</div>
+          <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3">
+            {areas.map((a) => (
+              <div key={a.id} className="rounded-xl border dark:border-slate-700 overflow-hidden">
+                <div className="px-3 py-1.5 text-white text-sm font-bold flex items-center gap-2" style={{ background: corDe(a.cor).bg }}>
+                  <span>Área {a.codigo}</span><span className="font-normal opacity-90 truncate">{a.nome}</span>
+                </div>
+                <div className="p-2 space-y-1">
+                  {capitaesDaArea(a.id).map((d) => (
+                    <div key={d.id} className="flex items-center gap-2 text-sm bg-amber-50 dark:bg-amber-900/20 rounded-lg px-2 py-1">
+                      <span className="flex-1 truncate">👤 {d.usuario.nome}</span>
+                      <button onClick={() => removerCapitao(d)} className="text-urgencia text-xs">remover</button>
+                    </div>
+                  ))}
+                  {capitaesDaArea(a.id).length === 0 && <div className="text-xs text-gray-400 px-1">sem capitão neste turno</div>}
+                  <select className="input !min-h-[36px] text-sm" value="" onChange={(e) => atribuirCapitao(a.id, e.target.value)}>
+                    <option value="">+ atribuir capitão…</option>
+                    {capitaes.map((u) => <option key={u.id} value={u.id}>{u.nome}</option>)}
+                  </select>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="text-[11px] text-gray-400 mt-2">O mesmo capitão pode cobrir mais de uma área e mais de um turno. Ele controla a equipe dos setores da área.</p>
+        </div>
+      )}
 
       <DragDropContext onDragEnd={handleDragEnd}>
         <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-4">

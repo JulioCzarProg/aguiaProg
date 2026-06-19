@@ -223,7 +223,7 @@ export default function MapaEditor({
 
         {/* Elementos editáveis: formas inseridas + setores internos (fora do SVG).
             Os setores do SVG (C/D com POS) NÃO são redesenhados aqui. */}
-        {visiveis.filter((s) => !(((s.tipo || 'setor') === 'setor') && posSvg(s.codigo))).map((s) => {
+        {visiveis.filter((s) => s.tipo !== 'area' && !(((s.tipo || 'setor') === 'setor') && posSvg(s.codigo))).map((s) => {
           const [cx, cy] = centro(s)
           const c = corDe(s.cor)
           const selecionado = s.id === setorSelecionado || s.id === sel
