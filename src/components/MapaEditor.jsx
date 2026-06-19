@@ -142,8 +142,9 @@ export default function MapaEditor({
     await supabase.from('setores').delete().eq('id', id)
     setMenu(null); recarregar?.()
   }
+  const camNum = (camada === 1 || camada === 2) ? camada : 1
   async function adicionar(tipo) {
-    const base = { evento_id: eventoId, camada, rotacao: 0, pos_x: 450, pos_y: 470, tipo }
+    const base = { evento_id: eventoId, camada: camNum, rotacao: 0, pos_x: 450, pos_y: 470, tipo }
     let extra
     if (tipo === 'setor') { const codigo = prompt('Código do novo setor:', 'NOVO'); if (!codigo) return; extra = { codigo, nome: codigo, cor: 'azul', largura: 90, altura: 60 } }
     else if (tipo === 'bloco') extra = { codigo: 'Bloco', nome: 'Bloco', cor: 'cinza', largura: 120, altura: 96 }
@@ -151,6 +152,26 @@ export default function MapaEditor({
     else extra = { codigo: 'TELA', nome: 'Tela', cor: 'cinza', pos_x: 130, pos_y: 420, largura: 120, altura: 70 }
     await supabase.from('setores').insert({ ...base, ...extra })
     recarregar?.()
+  }
+  // adiciona uma forma geométrica (visual): circulo, oval, quadrado, retangulo, meialua
+  async function adicionarForma(forma) {
+    const codigo = (prompt('Código do setor para esta forma (opcional):', '') || '').trim()
+    const quad = forma === 'quadrado' || forma === 'circulo'
+    await supabase.from('setores').insert({
+      evento_id: eventoId, camada: camNum, tipo: 'forma', codigo, nome: codigo || 'Forma',
+      cor: 'azul', rotacao: 0, pos_x: 450, pos_y: 460, largura: quad ? 90 : 120, altura: 90, pontos: { forma }
+    })
+    recarregar?.()
+  }
+  // duplica um elemento (mesmo código) só para visualização no mapa
+  async function duplicar(s) {
+    await supabase.from('setores').insert({
+      evento_id: eventoId, camada: s.camada ?? 1, tipo: 'forma', codigo: s.codigo, nome: s.nome, cor: s.cor,
+      rotacao: +s.rotacao || 0, pos_x: (+s.pos_x || 450) + 40, pos_y: (+s.pos_y || 460) + 40,
+      largura: +s.largura || 100, altura: +s.altura || 90,
+      pontos: (s.pontos && !Array.isArray(s.pontos)) ? s.pontos : { forma: 'retangulo' }
+    })
+    setMenu(null); recarregar?.()
   }
 
   return (
@@ -200,8 +221,9 @@ export default function MapaEditor({
           )
         })}
 
-        {/* Camada 2: formas editáveis (internos que NÃO estão no SVG) */}
-        {visiveis.filter((s) => (s.camada ?? 1) !== 1).map((s) => {
+        {/* Elementos editáveis: formas inseridas + setores internos (fora do SVG).
+            Os setores do SVG (C/D com POS) NÃO são redesenhados aqui. */}
+        {visiveis.filter((s) => !(((s.tipo || 'setor') === 'setor') && posSvg(s.codigo))).map((s) => {
           const [cx, cy] = centro(s)
           const c = corDe(s.cor)
           const selecionado = s.id === setorSelecionado || s.id === sel
@@ -210,6 +232,7 @@ export default function MapaEditor({
           const presentes = porSetor[s.codigo] || []
           const ix = +s.pos_x, iy = +s.pos_y, iw = +s.largura, ih = +s.altura
           const pts = pontosDe(s)
+          const forma = (s.pontos && !Array.isArray(s.pontos) && s.pontos.forma) || null
           const z2 = (s.camada ?? 1) === 2 // camada 2 = 2º plano (zebrado/fino)
           const comum = {
             style: { cursor: editavel ? 'move' : (onSetorClick ? 'pointer' : 'default') },
@@ -236,6 +259,23 @@ export default function MapaEditor({
                 })()}
               </>}
               {!pts && <g transform={`rotate(${r} ${cx} ${cy})`}>
+                {forma && <>
+                  {(() => {
+                    const fill = z2 ? `url(#zebra-${s.cor})` : c.bg
+                    const fop = z2 ? 0.85 : (selecionado ? 0.3 : 0.16)
+                    const sw = z2 ? 1.5 : (selecionado ? 5 : 3)
+                    const com = { fill, fillOpacity: fop, stroke: c.bg, strokeWidth: sw, strokeDasharray: z2 ? '5 4' : undefined, ...comum }
+                    if (forma === 'circulo') return <circle cx={cx} cy={cy} r={Math.min(iw, ih) / 2} {...com} />
+                    if (forma === 'oval') return <ellipse cx={cx} cy={cy} rx={iw / 2} ry={ih / 2} {...com} />
+                    if (forma === 'meialua') return <path d={`M ${ix} ${cy} A ${iw / 2} ${ih / 2} 0 0 1 ${ix + iw} ${cy} Z`} {...com} />
+                    return <rect x={ix} y={iy} width={iw} height={ih} rx={forma === 'quadrado' ? 4 : 6} {...com} />
+                  })()}
+                  {s.codigo && <>
+                    <circle cx={cx} cy={cy} r="15" fill={c.bg} stroke="#fff" strokeWidth="2" pointerEvents="none" />
+                    <text x={cx} y={cy + 5} fontSize="14" fontWeight="800" fill="#fff" textAnchor="middle" transform={`rotate(${-r} ${cx} ${cy})`} pointerEvents="none">{s.codigo}</text>
+                  </>}
+                </>}
+                {!forma && <>
                 {tipo === 'palco' && <>
                   <rect x={ix} y={iy} width={iw} height={ih} rx="6" fill="#1e293b" stroke={selecionado ? '#0f172a' : '#0f172a'} strokeWidth={selecionado ? 4 : 1} {...comum} />
                   <text x={cx} y={cy + 6} fontSize="18" fontWeight="800" fill="#fff" textAnchor="middle" transform={`rotate(${-r} ${cx} ${cy})`} pointerEvents="none">{s.codigo || 'PALCO'}</text>
@@ -259,6 +299,7 @@ export default function MapaEditor({
                   <circle cx={cx} cy={cy} r="17" fill={c.bg} stroke="#fff" strokeWidth="2" pointerEvents="none" />
                   <text x={cx} y={cy + 5} fontSize="15" fontWeight="800" fill="#fff" textAnchor="middle"
                     transform={`rotate(${-r} ${cx} ${cy})`} pointerEvents="none">{s.codigo}</text>
+                </>}
                 </>}
 
                 {editavel && selecionado && (
@@ -295,11 +336,14 @@ export default function MapaEditor({
       </svg>
 
       {editavel && (
-        <div className="absolute top-2 right-2 flex flex-wrap gap-1 justify-end">
-          <button onClick={() => adicionar('setor')} className="btn-primary !min-h-[36px] text-xs shadow"><Plus size={14} /> Setor</button>
-          <button onClick={() => adicionar('bloco')} className="btn-ghost !min-h-[36px] text-xs shadow">+ Bloco</button>
-          <button onClick={() => adicionar('palco')} className="btn-ghost !min-h-[36px] text-xs shadow">+ Palco</button>
-          <button onClick={() => adicionar('tela')} className="btn-ghost !min-h-[36px] text-xs shadow">+ Tela</button>
+        <div className="absolute top-2 right-2 flex flex-wrap gap-1 justify-end max-w-[70%]">
+          <button onClick={() => adicionar('setor')} className="btn-primary !min-h-[34px] text-xs shadow"><Plus size={13} /> Setor</button>
+          <button onClick={() => adicionarForma('retangulo')} className="btn-ghost !min-h-[34px] text-xs shadow">▭ Retângulo</button>
+          <button onClick={() => adicionarForma('quadrado')} className="btn-ghost !min-h-[34px] text-xs shadow">◻ Quadrado</button>
+          <button onClick={() => adicionarForma('circulo')} className="btn-ghost !min-h-[34px] text-xs shadow">○ Círculo</button>
+          <button onClick={() => adicionarForma('oval')} className="btn-ghost !min-h-[34px] text-xs shadow">⬭ Oval</button>
+          <button onClick={() => adicionarForma('meialua')} className="btn-ghost !min-h-[34px] text-xs shadow">◗ Meia-lua</button>
+          <button onClick={() => adicionar('bloco')} className="btn-ghost !min-h-[34px] text-xs shadow">+ Bloco</button>
         </div>
       )}
 
@@ -320,6 +364,10 @@ export default function MapaEditor({
           <button onClick={() => patch(menu.setor.id, { camada: (menu.setor.camada ?? 1) === 1 ? 2 : 1 })}
             className="block w-full text-left px-2 py-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700">
             Mover p/ camada {(menu.setor.camada ?? 1) === 1 ? '2' : '1'}
+          </button>
+          <button onClick={() => duplicar(menu.setor)}
+            className="block w-full text-left px-2 py-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700">
+            Duplicar (mesmo código, outra área)
           </button>
           <button onClick={() => excluir(menu.setor.id)}
             className="block w-full text-left px-2 py-1.5 rounded text-urgencia hover:bg-red-50 dark:hover:bg-red-900/30">Excluir setor</button>
