@@ -2,6 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import { Plus, MessageCircle, Phone, MapPin, X } from 'lucide-react'
 import { supabase } from '../supabase'
 import { corDe, LISTA_CORES } from './cores'
+import { POS } from './MapaArquibancadas'
+
+// Converte as posições do SVG (1080x1011) para o espaço do editor (imagem
+// 1000x1000 com preserveAspectRatio meet): escala 0.926 e deslocamento Y ~32.
+const ESC = 1000 / 1080, OFY = (1000 - 1011 * (1000 / 1080)) / 2
+const posSvg = (cod) => { const p = POS[cod]; return p ? [p[0] * ESC, p[1] * ESC + OFY] : null }
 
 // ===================================================================
 // Editor de mapa do ginásio. Setores = blocos editáveis (mover, girar,
@@ -170,8 +176,32 @@ export default function MapaEditor({
           return <image href={base} xlinkHref={base} x="0" y="0" width={SZ} height={SZ} preserveAspectRatio="xMidYMid meet" />
         })()}
 
-        {/* Elementos editáveis: setores, blocos de cadeiras, palco, tela */}
-        {visiveis.map((s) => {
+        {/* Camada 1: usa a geometria do PRÓPRIO SVG — só pontos de presença
+            e áreas de clique nas posições dos setores (sem redesenhar). */}
+        {camada !== 2 && arr.filter((s) => posSvg(s.codigo)).map((s) => {
+          const [px, py] = posSvg(s.codigo)
+          const presentes = porSetor[s.codigo] || []
+          return (
+            <g key={'p1-' + s.id}>
+              {onSetorClick && <circle cx={px} cy={py} r="22" fill="transparent" style={{ cursor: 'pointer' }} onClick={() => onSetorClick(s)} />}
+              {presentes.slice(0, 8).map((pr, i) => {
+                const ang = (i / 8) * Math.PI * 2
+                const dx = px + Math.cos(ang) * 20, dy = py + Math.sin(ang) * 20
+                return (
+                  <circle key={pr.id} cx={dx} cy={dy} r="6" fill={pr.atrasado ? '#9ca3af' : '#22c55e'} stroke="#fff" strokeWidth="1.5"
+                    pointerEvents={onUserClick ? 'auto' : 'none'} style={{ cursor: onUserClick ? 'pointer' : 'default' }}
+                    onClick={(e) => { if (onUserClick) { const rr = svgRef.current.parentElement.getBoundingClientRect(); setPopup({ x: e.clientX - rr.left, y: e.clientY - rr.top, user: pr }) } }}>
+                    {!pr.atrasado && <animate attributeName="r" values="6;8;6" dur="2s" repeatCount="indefinite" />}
+                  </circle>
+                )
+              })}
+              {presentes.length > 8 && <text x={px} y={py - 26} fontSize="14" fill="#16a34a" textAnchor="middle" fontWeight="800">+{presentes.length}</text>}
+            </g>
+          )
+        })}
+
+        {/* Camada 2: formas editáveis (internos que NÃO estão no SVG) */}
+        {visiveis.filter((s) => (s.camada ?? 1) !== 1).map((s) => {
           const [cx, cy] = centro(s)
           const c = corDe(s.cor)
           const selecionado = s.id === setorSelecionado || s.id === sel
