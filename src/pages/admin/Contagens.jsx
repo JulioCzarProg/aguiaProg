@@ -5,6 +5,7 @@ import { supabase } from '../../supabase'
 import { useEvento } from '../../contexts/EventoContext'
 import { useRealtime } from '../../hooks/useRealtime'
 import { exportarCSV } from '../../lib/csv'
+import { confirmar } from '../../lib/dialog'
 
 const STATUS = {
   pendente: { label: 'Pendente', cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40' },
@@ -43,7 +44,7 @@ export default function Contagens() {
 
   async function limparTurno() {
     if (!filtroTurno) return toast.error('Selecione um turno para limpar.')
-    if (!confirm(`Apagar TODAS as contagens do turno "${filtroTurno}"?`)) return
+    if (!(await confirmar(`Apagar TODAS as contagens do turno "${filtroTurno}"?`, { perigo: true }))) return
     await supabase.from('contagens').delete().eq('evento_id', evento.id).eq('turno', filtroTurno)
     toast.success('Contagens do turno apagadas.'); carregar()
   }

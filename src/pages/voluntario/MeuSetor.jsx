@@ -9,6 +9,7 @@ import { useLocalizacao } from '../../hooks/useLocalizacao'
 import { corDe } from '../../components/cores'
 import ValidarContagens from '../../components/ValidarContagens'
 import HorariosResumo from '../../components/HorariosResumo'
+import { confirmar } from '../../lib/dialog'
 
 export default function MeuSetor() {
   const { usuario, temNivel } = useAuth()
@@ -55,7 +56,7 @@ export default function MeuSetor() {
 
   async function enviarContagem() {
     if (!setorAtual) return toast.error('Você não tem setor designado.')
-    if (!confirm(`Enviar contagem de ${quantidade} pessoas — ${turno}?`)) return
+    if (!(await confirmar(`Enviar contagem de ${quantidade} pessoas — ${turno}?`))) return
     try {
       await enviar(turno)
       toast.success('Contagem enviada para o capitão validar!')
@@ -64,7 +65,7 @@ export default function MeuSetor() {
   }
 
   async function urgencia() {
-    if (!confirm('Enviar ALERTA DE URGÊNCIA para o canal Geral?')) return
+    if (!(await confirmar('Enviar ALERTA DE URGÊNCIA para o canal Geral?'))) return
     const { data: canal } = await supabase.from('canais')
       .select('id').eq('evento_id', evento.id).eq('nome', 'Geral').maybeSingle()
     if (!canal) return toast.error('Canal Geral não encontrado.')

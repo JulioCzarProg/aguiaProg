@@ -5,6 +5,7 @@ import { supabase } from '../../supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { useEvento } from '../../contexts/EventoContext'
 import Modal from '../../components/Modal'
+import { confirmar } from '../../lib/dialog'
 
 const vazio = { titulo: '', descricao: '', data_hora: '', local: '' }
 
@@ -73,7 +74,7 @@ export default function Reunioes() {
   }
 
   async function cancelar(r) {
-    if (!confirm(`Cancelar a reunião "${r.titulo}"?`)) return
+    if (!(await confirmar(`Cancelar a reunião "${r.titulo}"?`, { perigo: true }))) return
     await supabase.from('reunioes').delete().eq('id', r.id)
     toast.success('Reunião cancelada.'); carregar()
   }

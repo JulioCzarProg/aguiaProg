@@ -6,6 +6,7 @@ import { supabase } from '../../supabase'
 import { soDigitos } from '../../contexts/AuthContext'
 import { exportarCSV } from '../../lib/csv'
 import Modal from '../../components/Modal'
+import { confirmar } from '../../lib/dialog'
 
 const FUNCOES = ['voluntario', 'capitao', 'coordenador', 'admin']
 const vazio = { nome: '', telefone: '', congregacao: '', funcao: 'voluntario', senha: '' }
@@ -71,7 +72,7 @@ export default function Usuarios() {
     carregar()
   }
   async function excluir(u) {
-    if (!confirm(`Excluir ${u.nome}? Esta ação não pode ser desfeita.`)) return
+    if (!(await confirmar(`Excluir ${u.nome}? Esta ação não pode ser desfeita.`, { perigo: true }))) return
     await supabase.from('usuarios').delete().eq('id', u.id)
     toast.success('Excluído.'); carregar()
   }

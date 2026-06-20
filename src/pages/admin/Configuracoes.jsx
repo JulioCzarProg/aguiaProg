@@ -7,6 +7,7 @@ import { baixarJSON } from '../../lib/csv'
 import FotoUpload from '../../components/FotoUpload'
 import Modal from '../../components/Modal'
 import HorariosContagemConfig from '../../components/HorariosContagemConfig'
+import { confirmar } from '../../lib/dialog'
 
 const TABELAS = ['eventos', 'setores', 'usuarios', 'designacoes', 'localizacoes', 'canais', 'mensagens', 'contagens', 'reunioes', 'reuniao_participantes', 'logs_acesso']
 const eventoVazio = { nome: '', tipo: 'congresso', local: '', data_inicio: '', data_fim: '', ativo: true, mapa_url: null }
@@ -97,14 +98,14 @@ export default function Configuracoes() {
 
   // ---- Limpezas específicas ----
   async function limparChats() {
-    if (!confirm('Apagar TODAS as conversas (mensagens) deste evento? Não pode ser desfeito.')) return
+    if (!(await confirmar('Apagar TODAS as conversas (mensagens) deste evento? Não pode ser desfeito.', { perigo: true }))) return
     const { data: cs } = await supabase.from('canais').select('id').eq('evento_id', evento?.id)
     const ids = (cs || []).map((c) => c.id)
     if (ids.length) await supabase.from('mensagens').delete().in('canal_id', ids)
     toast.success('Conversas apagadas.')
   }
   async function limparAlertas() {
-    if (!confirm('Limpar os alertas/avisos ativos deste evento?')) return
+    if (!(await confirmar('Limpar os alertas/avisos ativos deste evento?'))) return
     await supabase.from('avisos').delete().eq('evento_id', evento?.id)
     toast.success('Alertas limpos.')
   }

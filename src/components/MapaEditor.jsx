@@ -3,6 +3,7 @@ import { Plus, MessageCircle, Phone, MapPin, X } from 'lucide-react'
 import { supabase } from '../supabase'
 import { corDe, LISTA_CORES } from './cores'
 import { POS } from './MapaArquibancadas'
+import { confirmar, pedir } from '../lib/dialog'
 
 // Converte as posições do SVG (1080x1011) para o espaço do editor (imagem
 // 1000x1000 com preserveAspectRatio meet): escala 0.926 e deslocamento Y ~32.
@@ -138,7 +139,7 @@ export default function MapaEditor({
     recarregar?.()
   }
   async function excluir(id) {
-    if (!confirm('Excluir este setor?')) return
+    if (!(await confirmar('Excluir este setor?', { perigo: true }))) return
     await supabase.from('setores').delete().eq('id', id)
     setMenu(null); recarregar?.()
   }
@@ -146,7 +147,7 @@ export default function MapaEditor({
   async function adicionar(tipo) {
     const base = { evento_id: eventoId, camada: camNum, rotacao: 0, pos_x: 450, pos_y: 470, tipo }
     let extra
-    if (tipo === 'setor') { const codigo = prompt('Código do novo setor:', 'NOVO'); if (!codigo) return; extra = { codigo, nome: codigo, cor: 'azul', largura: 90, altura: 60 } }
+    if (tipo === 'setor') { const codigo = await pedir('Código do novo setor:', 'NOVO'); if (!codigo) return; extra = { codigo, nome: codigo, cor: 'azul', largura: 90, altura: 60 } }
     else if (tipo === 'bloco') extra = { codigo: 'Bloco', nome: 'Bloco', cor: 'cinza', largura: 120, altura: 96 }
     else if (tipo === 'palco') extra = { codigo: 'PALCO', nome: 'Palco', cor: 'cinza', pos_x: 60, pos_y: 410, largura: 56, altura: 180 }
     else extra = { codigo: 'TELA', nome: 'Tela', cor: 'cinza', pos_x: 130, pos_y: 420, largura: 120, altura: 70 }
@@ -155,7 +156,7 @@ export default function MapaEditor({
   }
   // adiciona uma forma geométrica (visual): circulo, oval, quadrado, retangulo, meialua
   async function adicionarForma(forma) {
-    const codigo = (prompt('Código do setor para esta forma (opcional):', '') || '').trim()
+    const codigo = (await pedir('Código do setor para esta forma (opcional):', '') || '').trim()
     const quad = forma === 'quadrado' || forma === 'circulo'
     await supabase.from('setores').insert({
       evento_id: eventoId, camada: camNum, tipo: 'forma', codigo, nome: codigo || 'Forma',
@@ -359,7 +360,7 @@ export default function MapaEditor({
                 style={{ background: corDe(nome).bg }} title={corDe(nome).label} />
             ))}
           </div>
-          <button onClick={() => { const v = prompt('Código do setor:', menu.setor.codigo); if (v) patch(menu.setor.id, { codigo: v }) }}
+          <button onClick={async () => { const v = await pedir('Código do setor:', menu.setor.codigo); if (v) patch(menu.setor.id, { codigo: v }) }}
             className="block w-full text-left px-2 py-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700">Editar código</button>
           <button onClick={() => patch(menu.setor.id, { camada: (menu.setor.camada ?? 1) === 1 ? 2 : 1 })}
             className="block w-full text-left px-2 py-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700">

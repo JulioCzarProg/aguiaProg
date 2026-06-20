@@ -12,18 +12,23 @@ import Modal from '../../components/Modal'
 
 const NIVEL = { voluntario: 0, capitao: 1, coordenador: 2, admin: 3 }
 
+const TURNOS = ['Sex Manhã', 'Sex Tarde', 'Sáb Manhã', 'Sáb Tarde', 'Dom Manhã', 'Dom Tarde']
+
 async function garantirCanais(eventoId) {
   const { data: existentes } = await supabase.from('canais').select('nome').eq('evento_id', eventoId)
   const nomes = new Set((existentes || []).map((c) => c.nome))
   const base = [
     { nome: 'Geral', nivel_minimo: 'voluntario' },
-    { nome: 'Capitães', nivel_minimo: 'capitao' },
+    { nome: 'Capitães', nivel_minimo: 'capitao' },               // todos os capitães + coordenadores
     { nome: 'Coordenadores', nivel_minimo: 'coordenador' }
   ]
+  // canal por turno só de capitães
+  const capTurno = TURNOS.map((t) => ({ nome: `Capitães ${t}`, nivel_minimo: 'capitao', grupo: `TURNO:${t}` }))
+  // equipe por área (setores agrupados pela descrição = nome da área)
   const { data: setores } = await supabase.from('setores').select('descricao').eq('evento_id', eventoId).or('tipo.is.null,tipo.eq.setor')
   const grupos = [...new Set((setores || []).map((s) => s.descricao).filter(Boolean))]
   const equipes = grupos.map((g) => ({ nome: `Equipe: ${g}`, nivel_minimo: 'voluntario', grupo: g }))
-  const faltando = [...base, ...equipes].filter((c) => !nomes.has(c.nome)).map((c) => ({ ...c, evento_id: eventoId, tipo: 'grupo' }))
+  const faltando = [...base, ...capTurno, ...equipes].filter((c) => !nomes.has(c.nome)).map((c) => ({ ...c, evento_id: eventoId, tipo: 'grupo' }))
   if (faltando.length) await supabase.from('canais').insert(faltando)
 }
 
@@ -42,6 +47,9 @@ export default function Chat({ admin = false }) {
   const [usuarios, setUsuarios] = useState([])
   const [picker, setPicker] = useState(false)
   const [buscaPicker, setBuscaPicker] = useState('')
+  const [grupoModal, setGrupoModal] = useState(false)
+  const [grupoNome, setGrupoNome] = useState('')
+  const [grupoMembros, setGrupoMembros] = useState([])
   const [texto, setTexto] = useState('')
   const [urgente, setUrgente] = useState(false)
   const fileRef = useRef(null)
@@ -67,19 +75,26 @@ export default function Chat({ admin = false }) {
     if (admin) await garantirCanais(evento.id)
     const [{ data: us }, { data: des }, { data: canais }] = await Promise.all([
       supabase.from('usuarios').select('id, nome, telefone, funcao, congregacao').eq('ativo', true).order('nome'),
-      supabase.from('designacoes').select('setores(descricao)').eq('usuario_id', usuario.id).eq('evento_id', evento.id),
+      supabase.from('designacoes').select('turno, setores(descricao)').eq('usuario_id', usuario.id).eq('evento_id', evento.id),
       supabase.from('canais').select('*').eq('evento_id', evento.id)
     ])
     setUsuarios(us || [])
     const meusGrupos = new Set((des || []).map((d) => d.setores?.descricao).filter(Boolean))
+    const meusTurnos = new Set((des || []).map((d) => d.turno).filter(Boolean))
     const nivel = NIVEL[usuario.funcao] ?? 0
     const visiveis = (canais || []).filter((c) => {
       if (c.tipo === 'dm') return (c.participantes || []).includes(usuario.id)
+      // grupo personalizado (com membros definidos): só os membros (ou admin)
+      if (c.participantes && c.participantes.length) return admin || c.participantes.includes(usuario.id)
       if (admin) return true
       if (nivel < (NIVEL[c.nivel_minimo] ?? 0)) return false
-      // canal de equipe: capitão vê só o seu grupo; coordenador+ vê todos
-      if (c.grupo) return meusGrupos.has(c.grupo) || nivel >= NIVEL.coordenador
-      return true
+      if (c.grupo) {
+        // canal de capitães por turno: capitão vê os seus turnos; coordenador+ vê todos
+        if (c.grupo.startsWith('TURNO:')) return nivel >= NIVEL.coordenador || (nivel >= NIVEL.capitao && meusTurnos.has(c.grupo.slice(6)))
+        // canal de equipe (área): vê só a sua área; coordenador+ vê todas
+        return meusGrupos.has(c.grupo) || nivel >= NIVEL.coordenador
+      }
+      return true // Geral / Capitães (geral) / Coordenadores — já filtrados por nível
     })
     // metadados (última mensagem + não lidas)
     const lista = await Promise.all(visiveis.map(async (c) => {
@@ -146,6 +161,21 @@ export default function Chat({ admin = false }) {
     setCanalId(canal.id)
   }
 
+  // cria um grupo personalizado com membros escolhidos (coordenador/admin)
+  async function criarGrupo() {
+    if (!grupoNome.trim()) return toast.error('Dê um nome ao grupo.')
+    if (grupoMembros.length === 0) return toast.error('Selecione ao menos um membro.')
+    const membros = [...new Set([usuario.id, ...grupoMembros])]
+    const { data, error } = await supabase.from('canais').insert({
+      evento_id: evento.id, tipo: 'grupo', nome: grupoNome.trim(), nivel_minimo: 'voluntario', participantes: membros
+    }).select().single()
+    if (error) return toast.error('Erro: ' + error.message)
+    setGrupoModal(false); setGrupoNome(''); setGrupoMembros([])
+    await carregar(); if (data) setCanalId(data.id)
+    toast.success('Grupo criado!')
+  }
+  const toggleMembro = (id) => setGrupoMembros((m) => m.includes(id) ? m.filter((x) => x !== id) : [...m, id])
+
   // candidatos para nova conversa: admin/coord = todos; capitão = sua equipe
   const candidatos = usuarios.filter((u) => u.id !== usuario.id &&
     (temNivel('coordenador') || true) && // capitães e acima podem iniciar
@@ -159,8 +189,11 @@ export default function Chat({ admin = false }) {
       <div className={`${canalId ? 'hidden md:flex' : 'flex'} flex-col w-full md:w-80 border-r dark:border-slate-700 shrink-0`}>
         <div className="flex items-center gap-2 px-3 py-2 border-b dark:border-slate-700">
           <span className="font-bold flex-1">Conversas</span>
+          {temNivel('coordenador') && (
+            <button onClick={() => { setGrupoModal(true); setGrupoNome(''); setGrupoMembros([]); setBuscaPicker('') }} className="text-primary" aria-label="Novo grupo" title="Novo grupo"><Users size={20} /></button>
+          )}
           {temNivel('capitao') && (
-            <button onClick={() => { setPicker(true); setBuscaPicker('') }} className="text-primary" aria-label="Nova conversa"><PenSquare size={20} /></button>
+            <button onClick={() => { setPicker(true); setBuscaPicker('') }} className="text-primary" aria-label="Nova conversa" title="Nova conversa"><PenSquare size={20} /></button>
           )}
         </div>
         <div className="flex-1 overflow-y-auto">
@@ -229,6 +262,27 @@ export default function Chat({ admin = false }) {
               </div>
             </button>
           ))}
+        </div>
+      </Modal>
+
+      {/* Novo grupo (coordenador/admin) */}
+      <Modal aberto={grupoModal} titulo="Novo grupo" onFechar={() => setGrupoModal(false)}>
+        <div className="space-y-3">
+          <div><label className="label">Nome do grupo</label>
+            <input className="input" value={grupoNome} onChange={(e) => setGrupoNome(e.target.value)} placeholder="Ex.: Limpeza, Som, Líderes" /></div>
+          <div>
+            <label className="label">Membros ({grupoMembros.length})</label>
+            <input className="input mb-2" placeholder="Buscar pessoa…" value={buscaPicker} onChange={(e) => setBuscaPicker(e.target.value)} />
+            <div className="max-h-64 overflow-y-auto border dark:border-slate-700 rounded-xl p-1">
+              {candidatos.map((u) => (
+                <label key={u.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 dark:hover:bg-slate-700 cursor-pointer">
+                  <input type="checkbox" checked={grupoMembros.includes(u.id)} onChange={() => toggleMembro(u.id)} />
+                  <span className="flex-1 truncate text-sm">{u.nome} <span className="text-xs text-gray-400 capitalize">{u.funcao}</span></span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <button onClick={criarGrupo} className="btn-primary w-full">Criar grupo</button>
         </div>
       </Modal>
     </div>

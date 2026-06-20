@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import App from './App.jsx'
+import Dialogs from './components/Dialogs.jsx'
 import { AuthProvider } from './contexts/AuthContext.jsx'
 import { EventoProvider } from './contexts/EventoContext.jsx'
 import './index.css'
@@ -18,6 +19,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       <AuthProvider>
         <EventoProvider>
           <App />
+          <Dialogs />
           <Toaster
             position="top-center"
             toastOptions={{

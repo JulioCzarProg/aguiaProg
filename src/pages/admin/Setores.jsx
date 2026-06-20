@@ -4,6 +4,7 @@ import { supabase } from '../../supabase'
 import { useEvento } from '../../contexts/EventoContext'
 import { LISTA_CORES, corDe } from '../../components/cores'
 import Modal from '../../components/Modal'
+import { confirmar } from '../../lib/dialog'
 
 const vazio = { codigo: '', nome: '', descricao: '', cor: 'azul', capacidade: '' }
 
@@ -36,7 +37,7 @@ export default function Setores() {
     toast.success('Área criada!'); setNovaArea({ codigo: '', nome: '', cor: 'amarelo' }); carregar()
   }
   async function excluirArea(a) {
-    if (!confirm(`Excluir a área ${a.codigo} (${a.nome})? As designações de capitão dessa área serão removidas.`)) return
+    if (!(await confirmar(`Excluir a área ${a.codigo} (${a.nome})? As designações de capitão dessa área serão removidas.`, { perigo: true }))) return
     await supabase.from('setores').delete().eq('id', a.id)
     toast.success('Área excluída.'); carregar()
   }
@@ -71,7 +72,7 @@ export default function Setores() {
   }
 
   async function excluir(s) {
-    if (!confirm(`Excluir setor ${s.codigo}?`)) return
+    if (!(await confirmar(`Excluir setor ${s.codigo}?`, { perigo: true }))) return
     await supabase.from('setores').delete().eq('id', s.id)
     toast.success('Excluído.'); carregar()
   }
